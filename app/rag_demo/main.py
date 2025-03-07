@@ -1,11 +1,19 @@
 import os
 import logging
+import sys
 
-from llama_index.core import Settings, StorageContext
+# Configure logging to write to stdout
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
+
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.ollama import Ollama
-from llama_index.graph_stores.neo4j import Neo4jGraphStore
-from llama_index.core import KnowledgeGraphIndex
+from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
+from llama_index.core import PropertyGraphIndex
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -13,8 +21,6 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from rag_demo import custom_schema, getenv_or_exit 
-
-logger = logging.getLogger()
 
 MODEL_NAME = getenv_or_exit("MODEL_NAME")
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
@@ -31,38 +37,45 @@ class Query(BaseModel):
 
 @app.on_event("startup")
 def startup_db_client():
-    # Set up LlamaIndex
-    Settings.llm = Ollama(
-        model=MODEL_NAME,
-        base_url=OLLAMA_SERVER_URL,
-        request_timeout=120.0
-    )
-    Settings.embed_model = HuggingFaceEmbedding(model_name=EMBEDDING_MODEL_NAME)
-    
-    # Set up Neo4j connection and graph store
-    graph_store = Neo4jGraphStore(
-        username=NEO4J_USERNAME,
-        password=NEO4J_PASSWORD,
-        url=NEO4J_URI,
-        database="neo4j"
-    )
-    
-    # Create storage context with graph store
-    storage_context = StorageContext.from_defaults(
-        graph_store=graph_store
-    )
-    
-    # Load knowledge graph index
-    app.kg_index = KnowledgeGraphIndex.from_storage(storage_context)
-    
-    # Create query engine optimized for graph-based retrieval
-    app.query_engine = app.kg_index.as_query_engine(
-        response_mode="compact",
-        include_text=True,
-        embedding_mode="hybrid",  # Uses both graph structure and embeddings
-        retriever_mode="keyword",  # Can be "keyword", "embedding", or "hybrid"
-        max_paths=3,  # Number of paths to explore in the graph
-    )
+    try:
+        # Set up LlamaIndex
+        logger.info("=== Setting up LlamaIndex ===")
+        llm = Ollama(
+            model=MODEL_NAME,
+            base_url=OLLAMA_SERVER_URL,
+            request_timeout=120.0
+        )
+        embed_model = HuggingFaceEmbedding(model_name=EMBEDDING_MODEL_NAME)
+        
+        # Set up Neo4j connection
+        logger.info("=== Connecting to Neo4j ===")
+        graph_store = Neo4jPropertyGraphStore(
+            username=NEO4J_USERNAME,
+            password=NEO4J_PASSWORD,
+            url=NEO4J_URI,
+            database="neo4j"
+        )
+        
+        logger.info("=== Loading Existing Graph from Neo4j ===")
+        app.kg_index = PropertyGraphIndex.from_existing(
+            property_graph_store=graph_store,
+            llm=llm,
+            embed_model=embed_model
+        )
+        
+        logger.info("=== Creating Query Engine ===")
+        app.query_engine = app.kg_index.as_query_engine(
+            response_mode="compact",
+            include_text=True,
+            retriever_mode="keyword",
+            max_paths=3,
+            llm=llm
+        )
+        logger.info("=== Startup Complete ===")
+            
+    except Exception as e:
+        logger.error(f"Fatal startup error: {e}", exc_info=True)
+        raise e
 
 @app.get("/", response_class=HTMLResponse)
 async def get(request: Request):
