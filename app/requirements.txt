@@ -1,8 +1,12 @@
-llama-index-storage-docstore-redis==0.3.0
-llama-index-vector-stores-redis==0.4.0
-llama-index-embeddings-huggingface==0.5.0
+fastapi==0.109.2
+uvicorn==0.27.1
+python-dotenv==1.0.0
+pydantic>=2.8.0
+google-cloud-storage==2.13.0
+llama-index-core==0.12.22
+llama-index-llms-ollama==0.5.3
+llama-index-embeddings-huggingface==0.5.2
+neo4j==5.16.0
+llama-index-graph-stores-neo4j==0.4.6
 llama-index-readers-file==0.4.3
-llama-index-llms-ollama==0.5.0
-fastapi==0.115.6
-uvicorn==0.34.0
 

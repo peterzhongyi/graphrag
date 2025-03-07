@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: neo4j-conf
+data:
+  neo4j.conf: |
+    dbms.security.auth_enabled=true
+    dbms.memory.heap.initial_size=1G
+    dbms.memory.heap.max_size=2G
+    dbms.memory.pagecache.size=512M
+    dbms.default_listen_address=0.0.0.0
+    server.config.strict_validation.enabled=false
+    # APOC settings
+    dbms.security.procedures.unrestricted=apoc.*
+    dbms.security.procedures.allowlist=apoc.*
+    apoc.export.file.enabled=true
+    apoc.import.file.enabled=true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neo4j
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neo4j
+  template:
+    metadata:
+      labels:
+        app: neo4j
+    spec:
+      containers:
+      - name: neo4j
+        image: neo4j:2025.02
+        ports:
+        - containerPort: 7474
+          name: browser
+        - containerPort: 7687
+          name: bolt
+        - containerPort: 7473
+          name: browser-https
+        env:
+        - name: NEO4J_AUTH
+          value: neo4j/password123
+        - name: NEO4J_apoc_export_file_enabled
+          value: "true"
+        - name: NEO4J_apoc_import_file_enabled
+          value: "true"
+        - name: NEO4J_apoc_import_file_use__neo4j__config
+          value: "true"
+        - name: NEO4J_PLUGINS
+          value: '["apoc"]'
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: logs
+          mountPath: /logs
+        - name: config-volume
+          mountPath: /conf
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+      volumes:
+      - name: config-volume
+        configMap:
+          name: neo4j-conf
+      - name: data
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neo4j
+spec:
+  selector:
+    app: neo4j
+  type: LoadBalancer
+  ports:
+  - port: 7474
+    targetPort: 7474
+    name: browser
+  - port: 7687
+    targetPort: 7687
+    name: bolt

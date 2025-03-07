@@ -1,37 +1,20 @@
 import os
-import logging 
+from typing import Optional
 
-from redisvl.schema import IndexSchema
-
-logger = logging.getLogger()
-
-custom_schema = IndexSchema.from_dict(
-    {
-        "index": {"name": "bucket", "prefix": "doc"},
-        # customize fields that are indexed
-        "fields": [
-            # required fields for llamaindex
-            {"type": "tag", "name": "id"},
-            {"type": "tag", "name": "doc_id"},
-            {"type": "text", "name": "text"},
-            # custom vector field for bge-small-en-v1.5 embeddings
-            {
-                "type": "vector",
-                "name": "vector",
-                "attrs": {
-                    "dims": 384,
-                    "algorithm": "hnsw",
-                    "distance_metric": "cosine",
-                },
-            },
-        ],
-    }
-)
-
-def getenv_or_exit(name: str) -> str:
-    value = os.getenv(name) 
+def getenv_or_exit(env_var: str) -> str:
+    """Get environment variable or exit if not found."""
+    value = os.getenv(env_var)
     if value is None:
-        logger.critical(f"The environment variable '{name}' is not specified")
-        exit(1)
-
+        raise ValueError(f"Environment variable {env_var} not set")
     return value
+
+# Define custom schema for knowledge graph
+custom_schema = {
+    "node_types": ["entity", "concept", "event"],
+    "rel_types": ["related_to", "has_property", "occurs_in"],
+    "attributes": {
+        "entity": ["name", "type", "description"],
+        "concept": ["name", "definition"],
+        "event": ["name", "date", "description"]
+    }
+}
